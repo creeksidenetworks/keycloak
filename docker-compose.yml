@@ -3,34 +3,38 @@ services:
       image: quay.io/keycloak/keycloak:latest
       container_name: keycloak
       command: >
-          start --http-enabled=true --proxy-headers=xforwarded
+        start --http-enabled=true --proxy-headers=xforwarded
       environment:
-      - KC_DB=postgres
-      - KC_DB_URL=jdbc:postgresql://keycloak-postgres:5432/
-      - KC_DB_USERNAME=${POSTGRES_USER}
-      - KC_DB_PASSWORD=${POSTGRES_PASSWORD}
-      - KC_HOSTNAME=${KC_HOSTNAME}
-      - KC_HOSTNAME_STRICT=${KC_HOSTNAME_STRICT}
-      - KC_BOOTSTRAP_ADMIN_USERNAME=${KC_BOOTSTRAP_ADMIN_USERNAME}
-      - KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_BOOTSTRAP_ADMIN_PASSWORD}
+        - KC_DB=postgres
+        - KC_DB_URL=jdbc:postgresql://keycloak-postgres:5432/
+        - KC_DB_USERNAME=${POSTGRES_USER}
+        - KC_DB_PASSWORD=${POSTGRES_PASSWORD}
+        - KC_HOSTNAME=${KC_HOSTNAME}
+        - KC_HOSTNAME_STRICT=${KC_HOSTNAME_STRICT}
+        - KC_BOOTSTRAP_ADMIN_USERNAME=${KC_BOOTSTRAP_ADMIN_USERNAME}
+        - KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_BOOTSTRAP_ADMIN_PASSWORD}
+        - KC_SPI_TRUSTSTORE_FILE_ENABLED=true
+        - KC_SPI_TRUSTSTORE_FILE_FILE=/opt/keycloak/conf/cacerts
+        - KC_SPI_TRUSTSTORE_FILE_PASSWORD=changeit
+        - KC_SPI_TRUSTSTORE_FILE_HOSTNAME_VERIFICATION_POLICY=ANY
       ports:
-      - "8080:8080"
+        - "8080:8080"
       volumes:
-      - ./runtime/keycloak_conf:/opt/keycloak/conf
+        - ./runtime/keycloak_conf:/opt/keycloak/conf
       depends_on:
-      - keycloak-postgres
+        - keycloak-postgres
 
   keycloak-postgres:
       image: postgres:15
       container_name: keycloak-postgres
       environment:
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+        - POSTGRES_DB=${POSTGRES_DB}
+        - POSTGRES_USER=${POSTGRES_USER}
+        - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       ports:
-      - "5432:5432"
+        - "5432:5432"
       volumes:
-      - ./runtime/postgres_data:/var/lib/postgresql/data
+        - ./runtime/postgres_data:/var/lib/postgresql/data
 
 volumes:
   postgres_data:
