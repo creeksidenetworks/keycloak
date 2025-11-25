@@ -21,6 +21,7 @@ services:
         - "8080:8080"
       volumes:
         - ./runtime/keycloak_conf:/opt/keycloak/conf
+        - ./providers:/opt/keycloak/providers
       depends_on:
         - keycloak-postgres
 

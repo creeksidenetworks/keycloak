@@ -255,6 +255,7 @@ services:
         - "5432:5432"
       volumes:
         - ./runtime/postgres_data:/var/lib/postgresql/data
+        - ./providers:/opt/keycloak/providers
 
 volumes:
   postgres_data:
