@@ -226,6 +226,18 @@ This ensures:
 ### Email OTP Authentication Setup
 
 The custom email OTP authenticator is included in `providers/keycloak-2fa-email-authenticator.jar`.
+**Required Docker Compose Directory Mapping**
+
+In your `docker-compose.yml`, ensure the following volume mapping is present for Keycloak:
+
+```yaml
+services:
+   keycloak:
+      volumes:
+         - ./runtime/keycloak_conf:/opt/keycloak/conf
+```
+
+This mounts the local `runtime/keycloak_conf` directory into the Keycloak container, ensuring persistent configuration and truststore storage.
 
 #### 1. Create Authentication Flow
 
@@ -263,6 +275,8 @@ The custom email OTP authenticator is included in `providers/keycloak-2fa-email-
 2. Click **"Action"** menu (three dots)
 3. Select **"Bind flow"** → Choose **Browser flow**
 4. Click **"Save"**
+
+![Advanced Configuration](./images/brower-email-otp.png)
 
 ### Email Password Reset Flow
 
@@ -344,9 +358,12 @@ ipa pwpolicy-mod --maxlife=365 --minlife=0 --history=3
 
 **Note**: For password reset to work with FreeIPA LDAP, ensure your LDAP provider **Edit Mode** is set to **WRITABLE** instead of READ_ONLY.
 
+![Advanced Configuration](./images/reset-credential.png)
 
-![Advanced Configuration](./images/password-reset-with-email-otp-flow.png)
+### Enable "Forgot password"
+To enable "Forgot password" button on login dialogue box, you should turn on "Forgot password" in Realm settings/Login.
 
+![Advanced Configuration](./images/enable-forgot-password.png)
 
 ### Nginx Proxy Manager Configuration
 
