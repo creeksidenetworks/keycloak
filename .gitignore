@@ -2,8 +2,7 @@
 .env
 
 # Docker volumes
-postgres_data/
-npm/
+runtime/
 
 # FreeIPA CA certificate (specific to your environment)
-ipa-ca.crt
+*.crt

@@ -2,6 +2,20 @@
 
 Complete Identity and Access Management (IAM) solution with FreeIPA LDAP integration and Email OTP authentication.
 
+## Updates
+
+### Keycloak Admin Variables
+- The environment variables `KEYCLOAK_ADMIN` and `KEYCLOAK_ADMIN_PASSWORD` have been replaced with `KC_BOOTSTRAP_ADMIN_USERNAME` and `KC_BOOTSTRAP_ADMIN_PASSWORD`.
+- Update your `.env` file accordingly.
+
+### Hostname Configuration
+- Added `KC_HOSTNAME_STRICT=false` to `.env` for better hostname flexibility.
+- Ensure your `.env` file includes this variable.
+
+### Docker Compose Updates
+- The `docker-compose.yml` file now reflects the updated admin variables and hostname configuration.
+- Ensure the `runtime/keycloak_conf` volume is mounted for Keycloak.
+
 ## Architecture
 
 - **Keycloak**: Identity and Access Management (IAM)
@@ -52,32 +66,8 @@ docker compose up -d
 This starts:
 - PostgreSQL database
 - Keycloak server
-- Nginx Proxy Manager
 
-### 3. Initialize FreeIPA CA Certificate
-
-Choose one of the following methods to import the FreeIPA CA certificate:
-
-#### Option A: Pre-startup Initialization (Recommended)
-Run before starting containers (no restart required):
-
-```bash
-./init-truststore.sh
-docker compose up -d
-```
-
-#### Option B: Post-startup Setup
-Start containers first, then run setup:
-
-```bash
-docker compose up -d
-./init.sh
-docker compose restart keycloak
-```
-
-Both scripts automatically detect the FreeIPA server from your `.env` file and import the CA certificate into Keycloak's truststore.
-
-### 4. Verify Services
+### 3. Verify Services
 
 ```bash
 docker ps
@@ -86,15 +76,17 @@ docker ps
 Expected containers:
 - `keycloak` - Keycloak IAM server
 - `keycloak-postgres` - PostgreSQL database
-- `nginx-proxy-manager` - Reverse proxy
 
-### 5. Access Keycloak
+### 4. Access Keycloak
 
 - **Internal**: http://localhost:8080
-- **External**: https://your-domain.com (after NPM configuration)
-- **Admin credentials**: From `.env` file (`KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD`)
+- **Admin credentials**: From `.env` file (`KC_BOOTSTRAP_ADMIN_USERNAME` / `KC_BOOTSTRAP_ADMIN_PASSWORD`)
 
 **⚠️ IMPORTANT**: Change the admin password after first login!
+
+---
+
+For more details, refer to the full documentation below.
 
 ## Configuration
 
@@ -585,13 +577,25 @@ keycloak/
 
 ## Environment Variables
 
+
+## OAuth2 Proxy Cookie Secret
+
+To generate a secure cookie secret for OAuth2 Proxy, run:
+
+```bash
+openssl rand -base64 32
+```
+
+Copy the output and set it as the value for `OAUTH2_PROXY_COOKIE_SECRET` in your `.env.oauth2proxy` file.
+
+## Environment Variables
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `POSTGRES_DB` | PostgreSQL database name | keycloak |
 | `POSTGRES_USER` | PostgreSQL username | keycloak |
 | `POSTGRES_PASSWORD` | PostgreSQL password | strong_password |
-| `KEYCLOAK_ADMIN` | Keycloak admin username | admin |
-| `KEYCLOAK_ADMIN_PASSWORD` | Keycloak admin password | strong_password |
+| `KC_BOOTSTRAP_ADMIN_USERNAME` | Keycloak admin username | admin |
+| `KC_BOOTSTRAP_ADMIN_PASSWORD` | Keycloak admin password | strong_password |
 | `KC_HOSTNAME` | Public hostname | keycloak.example.com |
 | `KC_HOSTNAME_INTERNAL` | Internal hostname | keycloak.internal |
 | `FREEIPA_SERVER_HOST` | FreeIPA hostname | ipa.example.com |
