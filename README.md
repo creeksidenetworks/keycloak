@@ -206,26 +206,6 @@ This ensures:
 - Last Name → FreeIPA's `sn` (surname)
 - Display Name → FreeIPA's `cn` (full name)
 
-#### 6. Configure Group Mapping (Optional)
-
-1. Go to **Mappers** tab of your LDAP provider
-2. Click **"Add mapper"**
-3. Configure:
-   - **Name**: groups
-   - **Mapper Type**: group-ldap-mapper
-   - **LDAP Groups DN**: `cn=groups,cn=accounts,dc=example,dc=com`
-   - **Group Name LDAP Attribute**: `cn`
-   - **Group Object Classes**: `groupOfNames`
-   - **Membership LDAP Attribute**: `member`
-   - **Membership Attribute Type**: DN
-   - **Mode**: READ_ONLY
-   - **User Groups Retrieve Strategy**: LOAD_GROUPS_BY_MEMBER_ATTRIBUTE
-4. Click **"Save"**
-5. Click **"Sync LDAP Groups to Keycloak"**
-
-![Advanced Configuration](./images/group-mapper.png)
-
-
 ### Email OTP Authentication Setup
 
 The custom email OTP authenticator is included in `providers/keycloak-2fa-email-authenticator.jar`.
