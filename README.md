@@ -2,6 +2,54 @@
 
 Complete Identity and Access Management (IAM) solution with FreeIPA LDAP integration and Email OTP authentication.
 
+## Quick Start
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+- Server joined to FreeIPA domain, OR running on FreeIPA server
+- Domain name configured for external access
+
+### 1. Run Setup Script
+
+The setup script automatically detects your FreeIPA configuration and generates all required files.
+
+```bash
+./setup.sh -h keycloak.example.com
+```
+
+**Arguments:**
+| Argument | Description | Required |
+|----------|-------------|----------|
+| `-h <hostname>` | External hostname for Keycloak (e.g., keycloak.example.com) | Yes |
+| `-?` | Show help | No |
+
+The script will:
+- Auto-detect if running on FreeIPA server or client
+- Import FreeIPA CA certificate into Java truststore
+- Generate `.env` file with secure random passwords
+- Generate `docker-compose.yml` configuration
+- Use port 28080 on IPA server (8080 is used by IPA), port 8080 otherwise
+
+### 2. Start Services
+
+```bash
+docker compose up -d
+```
+
+### 3. Access Keycloak
+
+After startup, check the `.env` file for admin credentials:
+```bash
+grep KC_BOOTSTRAP_ADMIN .env
+```
+
+Access Keycloak at the URL shown in the setup summary (e.g., `http://keycloak.example.com:8080`).
+
+**⚠️ IMPORTANT**: Change the admin password after first login!
+
+---
+
 ## Updates
 
 ### Keycloak Admin Variables
@@ -30,18 +78,21 @@ Complete Identity and Access Management (IAM) solution with FreeIPA LDAP integra
 - FreeIPA server running and accessible
 - SMTP server for email delivery
 - Domain name configured
-- FreeIPA CA certificate (automatically imported on startup)
+- FreeIPA CA certificate (automatically imported by setup script)
 
 ## Features
 
+- ✅ Automatic FreeIPA detection (server or client)
 - ✅ Secure LDAPS connection with FreeIPA CA certificate
-- ✅ Automatic certificate import on container startup
+- ✅ Automatic certificate import on setup
 - ✅ Email-based OTP for two-factor authentication
 - ✅ User and group synchronization from FreeIPA
 - ✅ SSL/TLS termination with Nginx Proxy Manager
 - ✅ Persistent PostgreSQL database
 
-## Quick Start
+## Manual Configuration (Alternative)
+
+If you prefer manual setup instead of using the setup script:
 
 ### 1. Configure Environment
 
@@ -83,10 +134,6 @@ Expected containers:
 - **Admin credentials**: From `.env` file (`KC_BOOTSTRAP_ADMIN_USERNAME` / `KC_BOOTSTRAP_ADMIN_PASSWORD`)
 
 **⚠️ IMPORTANT**: Change the admin password after first login!
-
----
-
-For more details, refer to the full documentation below.
 
 ## Configuration
 

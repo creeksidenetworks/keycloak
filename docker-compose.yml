@@ -3,7 +3,7 @@ services:
       image: quay.io/keycloak/keycloak:latest
       container_name: keycloak
       command: >
-        start --http-enabled=true --proxy-headers=xforwarded
+          start --http-enabled=true --proxy-headers=xforwarded
       environment:
         - KC_DB=postgres
         - KC_DB_URL=jdbc:postgresql://keycloak-postgres:5432/
@@ -18,10 +18,9 @@ services:
         - KC_SPI_TRUSTSTORE_FILE_PASSWORD=changeit
         - KC_SPI_TRUSTSTORE_FILE_HOSTNAME_VERIFICATION_POLICY=ANY
       ports:
-        - "8080:8080"
+        - "${KEYCLOAK_HTTP_PORT}:8080"
       volumes:
         - ./runtime/keycloak_conf:/opt/keycloak/conf
-        - ./providers:/opt/keycloak/providers
       depends_on:
         - keycloak-postgres
 
@@ -36,6 +35,7 @@ services:
         - "5432:5432"
       volumes:
         - ./runtime/postgres_data:/var/lib/postgresql/data
+        - ./providers:/opt/keycloak/providers
 
 volumes:
   postgres_data:
