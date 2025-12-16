@@ -293,7 +293,8 @@ This mounts the local `runtime/keycloak_conf` directory into the Keycloak contai
 **Create Forms Subflow:**
 1. Click **"Add flow"**
 2. Name: Forms
-3. Requirement: **Alternative**
+3. Flow type: Generic
+4. Requirement: **Alternative**
 
 **Inside Forms subflow:**
 1. Click **"Add step"** → Select **"Username Password Form"** → Requirement: **Required**
