@@ -369,6 +369,7 @@ services:
         - "${KEYCLOAK_HTTP_PORT}:8080"
       volumes:
         - ./runtime/keycloak_conf:/opt/keycloak/conf
+        - ./providers:/opt/keycloak/providers
       depends_on:
         - keycloak-postgres
 
@@ -383,7 +384,6 @@ services:
         - "5432:5432"
       volumes:
         - ./runtime/postgres_data:/var/lib/postgresql/data
-        - ./providers:/opt/keycloak/providers
 
 volumes:
   postgres_data:
