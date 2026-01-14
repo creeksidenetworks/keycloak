@@ -36,16 +36,18 @@ set -e
 # --- Global Variables ---
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORK_DIR="/opt/keycloak"
 LOG_FILE="/tmp/keycloak-setup-$(date +%Y%m%d-%H%M%S).log"
 TMP_DIR=""
 CERT_FILE=""
 CONTAINER_NAME="keycloak"
 ALIAS="freeipa-ca"
-TRUSTSTORE_DIR="./runtime/keycloak_conf"
+TRUSTSTORE_DIR="${WORK_DIR}/runtime/keycloak_conf"
 
 # Detection results
 IS_IPA_SERVER="false"
 IPA_SERVER=""
+IPA_SERVER_SPECIFIED=""
 KEYCLOAK_HTTP_PORT=""
 KC_HOSTNAME=""
 
@@ -53,18 +55,20 @@ KC_HOSTNAME=""
 
 show_usage() {
     cat << EOF
-Usage: $0 -h <external_hostname>
+Usage: $0 -h <external_hostname> [-s <ipa_server_hostname>]
 
 Arguments:
   -h <hostname>   External hostname for Keycloak (e.g., keycloak.example.com)
                   This is the hostname users will use to access Keycloak
+  -s <hostname>   FreeIPA server hostname (optional, will auto-detect if not specified)
+                  Use this to override automatic FreeIPA detection
   -?              Show this help
 
 Examples:
   $0 -h keycloak.example.com
-  $0 -h sso.mycompany.com
+  $0 -h sso.mycompany.com -s ipa.example.com
 
-The script will auto-detect FreeIPA configuration:
+The script will auto-detect FreeIPA configuration if -s is not provided:
   - If running on FreeIPA server: Uses local CA cert, port 28080
   - If running on FreeIPA client: Downloads CA cert from server, port 8080
 EOF
@@ -148,6 +152,66 @@ Please verify:
     import_certificate_to_truststore
 }
 
+mkdir_work_dir() {
+    log "Creating work directory $WORK_DIR if it doesn't exist..."
+    mkdir -p "$WORK_DIR"
+}
+
+install_java() {
+    log "Attempting to install Java/JDK..."
+    
+    # Check if keytool is already available
+    if command -v keytool &> /dev/null; then
+        log "✓ Java/JDK is already installed"
+        return 0
+    fi
+    
+    # Detect OS and install appropriate Java package
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS_ID="$ID"
+    else
+        log "WARNING: Could not detect OS. Attempting generic installation."
+        return 1
+    fi
+    
+    case "$OS_ID" in
+        rhel|centos|fedora|rocky|almalinux)
+            log "Detected RHEL-based system. Installing java-latest-openjdk..."
+            if command -v dnf &> /dev/null; then
+                dnf install -y java-latest-openjdk >/dev/null 2>&1
+            elif command -v yum &> /dev/null; then
+                yum install -y java-latest-openjdk >/dev/null 2>&1
+            else
+                log "ERROR: Neither dnf nor yum found. Cannot install Java."
+                return 1
+            fi
+            ;;
+        debian|ubuntu)
+            log "Detected Debian-based system. Installing default-jdk..."
+            apt-get update >/dev/null 2>&1
+            apt-get install -y default-jdk >/dev/null 2>&1
+            ;;
+        alpine)
+            log "Detected Alpine system. Installing openjdk11..."
+            apk add --no-cache openjdk11 >/dev/null 2>&1
+            ;;
+        *)
+            log "WARNING: Unsupported OS: $OS_ID. Java installation may fail."
+            return 1
+            ;;
+    esac
+    
+    # Verify installation
+    if command -v keytool &> /dev/null; then
+        log "✓ Java/JDK installed successfully"
+        return 0
+    else
+        log "WARNING: Java/JDK installation failed or keytool not found in PATH"
+        return 1
+    fi
+}
+
 extract_system_cacerts() {
     log "Starting temporary Keycloak container to extract system cacerts..."
     
@@ -220,6 +284,17 @@ extract_system_cacerts() {
 }
 
 import_certificate_to_truststore() {
+    # Check if keytool is available, if not try to install Java/JDK
+    if ! command -v keytool &> /dev/null; then
+        log "keytool not found. Attempting to install Java/JDK..."
+        if ! install_java; then
+            log "WARNING: keytool not found and Java/JDK installation failed."
+            log "         Certificate import will be skipped."
+            log "         You can manually install Java/JDK and re-run the script to import the certificate."
+            return 0
+        fi
+    fi
+
     log "Preparing truststore directory..."
     
     mkdir -p "$TRUSTSTORE_DIR"
@@ -245,8 +320,10 @@ import_certificate_to_truststore() {
     if [ $? -eq 0 ]; then
         log "✓ Certificate imported successfully"
     else
-        error_exit "Failed to import certificate"
-    fi
+        log "WARNING: Failed to import certificate. The truststore file was created but may not contain the FreeIPA CA certificate."
+        log "         You can manually import the certificate using keytool once Java/JDK is installed."
+        return 0
+    fi 
 
     # Verify import
     log "Verifying certificate import..."
@@ -256,45 +333,54 @@ import_certificate_to_truststore() {
 # --- Configuration Detection ---
 
 detect_freeipa_configuration() {
-    log "Detecting FreeIPA configuration..."
-    
-    # Two scenarios:
-    #   1) This host IS the FreeIPA server: has 'host' but NO 'server' in default.conf
-    #   2) This host is a FreeIPA client: has 'server' keyword pointing to IPA server
-
-    if [ -f "/etc/ipa/default.conf" ]; then
-        # Check if this is a FreeIPA client (has 'server' keyword)
-        IPA_SERVER=$(grep "^server" /etc/ipa/default.conf 2>/dev/null | cut -d '=' -f2 | tr -d ' ')
-        
-        if [ -n "$IPA_SERVER" ]; then
-            # Case 2: This is a FreeIPA client
-            IS_IPA_SERVER="false"
-            log "Detected FreeIPA client configuration"
-            log "  IPA Server: $IPA_SERVER"
-        else
-            # Check if this is a FreeIPA server (has 'host' keyword but no 'server')
-            local LOCAL_HOST=$(grep "^host" /etc/ipa/default.conf 2>/dev/null | cut -d '=' -f2 | tr -d ' ')
-            if [ -n "$LOCAL_HOST" ] && [ -f "/etc/ipa/ca.crt" ]; then
-                # Case 1: This IS the FreeIPA server
-                IS_IPA_SERVER="true"
-                IPA_SERVER="$LOCAL_HOST"
-                log "Detected FreeIPA server installation"
-                log "  Local host: $IPA_SERVER"
-            fi
-        fi
+    # If IPA server was explicitly specified via -s argument, use it
+    if [ -n "$IPA_SERVER_SPECIFIED" ]; then
+        log "Using FreeIPA server specified via -s argument: $IPA_SERVER_SPECIFIED"
+        IPA_SERVER="$IPA_SERVER_SPECIFIED"
+        IS_IPA_SERVER="false"
     else
-        log ""
-        log "ERROR: FreeIPA configuration not detected"
-        log ""
-        log "This server must be joined to a FreeIPA domain before running this setup."
-        log ""
-        log "To join this server to FreeIPA, run:"
-        log "  ipa-client-install --server=<ipa-server-fqdn> --domain=<domain>"
-        log ""
-        log "Or if installing Keycloak on the FreeIPA server itself, ensure FreeIPA"
-        log "is properly installed and /etc/ipa/default.conf exists."
-        log ""
-        exit 1
+        log "Detecting FreeIPA configuration..."
+        
+        # Two scenarios:
+        #   1) This host IS the FreeIPA server: has 'host' but NO 'server' in default.conf
+        #   2) This host is a FreeIPA client: has 'server' keyword pointing to IPA server
+
+        if [ -f "/etc/ipa/default.conf" ]; then
+            # Check if this is a FreeIPA client (has 'server' keyword)
+            IPA_SERVER=$(grep "^server" /etc/ipa/default.conf 2>/dev/null | cut -d '=' -f2 | tr -d ' ')
+            
+            if [ -n "$IPA_SERVER" ]; then
+                # Case 2: This is a FreeIPA client
+                IS_IPA_SERVER="false"
+                log "Detected FreeIPA client configuration"
+                log "  IPA Server: $IPA_SERVER"
+            else
+                # Check if this is a FreeIPA server (has 'host' keyword but no 'server')
+                local LOCAL_HOST=$(grep "^host" /etc/ipa/default.conf 2>/dev/null | cut -d '=' -f2 | tr -d ' ')
+                if [ -n "$LOCAL_HOST" ] && [ -f "/etc/ipa/ca.crt" ]; then
+                    # Case 1: This IS the FreeIPA server
+                    IS_IPA_SERVER="true"
+                    IPA_SERVER="$LOCAL_HOST"
+                    log "Detected FreeIPA server installation"
+                    log "  Local host: $IPA_SERVER"
+                fi
+            fi
+        else
+            log ""
+            log "ERROR: FreeIPA configuration not detected"
+            log ""
+            log "This server must be joined to a FreeIPA domain before running this setup."
+            log ""
+            log "To join this server to FreeIPA, run:"
+            log "  ipa-client-install --server=<ipa-server-fqdn> --domain=<domain>"
+            log ""
+            log "Or if installing Keycloak on the FreeIPA server itself, ensure FreeIPA"
+            log "is properly installed and /etc/ipa/default.conf exists."
+            log ""
+            log "Alternatively, specify the FreeIPA server hostname using: -s <ipa-server-fqdn>"
+            log ""
+            exit 1
+        fi
     fi
 
     # Set Keycloak HTTP port based on installation type
@@ -325,7 +411,7 @@ generate_env_file() {
         fi
     fi
 
-    cat > .env <<EOF
+    cat > "$WORK_DIR/.env" <<EOF
 POSTGRES_DB=keycloak
 POSTGRES_USER=keycloak
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
@@ -339,13 +425,13 @@ KEYCLOAK_HTTP_PORT=$KEYCLOAK_HTTP_PORT
 KC_HOSTNAME_STRICT=false
 EOF
 
-    log "✓ .env file created"
+    log "✓ .env file created at $WORK_DIR/.env"
 }
 
 generate_docker_compose() {
     log "Generating docker-compose.yml..."
 
-    cat > docker-compose.yml <<'DOCKEREOF'
+    cat > "$WORK_DIR/docker-compose.yml" <<'DOCKEREOF'
 services:
   keycloak:
       image: quay.io/keycloak/keycloak:latest
@@ -368,8 +454,8 @@ services:
       ports:
         - "${KEYCLOAK_HTTP_PORT}:8080"
       volumes:
-        - ./runtime/keycloak_conf:/opt/keycloak/conf
-        - ./providers:/opt/keycloak/providers
+        - /opt/keycloak/runtime/keycloak_conf:/opt/keycloak/conf
+        - /opt/keycloak/providers:/opt/keycloak/providers
       depends_on:
         - keycloak-postgres
 
@@ -383,7 +469,7 @@ services:
       ports:
         - "5432:5432"
       volumes:
-        - ./runtime/postgres_data:/var/lib/postgresql/data
+        - /opt/keycloak/runtime/postgres_data:/var/lib/postgresql/data
 
 volumes:
   postgres_data:
@@ -391,10 +477,10 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: ./runtime/postgres_data
+      device: /opt/keycloak/runtime/postgres_data
 DOCKEREOF
 
-    log "✓ docker-compose.yml file created"
+    log "✓ docker-compose.yml file created at $WORK_DIR/docker-compose.yml"
 }
 
 # --- Firewall Configuration ---
@@ -429,7 +515,7 @@ configure_firewall() {
 # --- Summary Display ---
 
 show_summary() {
-    local KC_ADMIN_PASSWORD=$(grep KC_BOOTSTRAP_ADMIN_PASSWORD .env | cut -d '=' -f2)
+    local KC_ADMIN_PASSWORD=$(grep KC_BOOTSTRAP_ADMIN_PASSWORD "$WORK_DIR/.env" | cut -d '=' -f2)
     local HOSTNAME_INTERNAL=$(hostname -f)
     
     log ""
@@ -449,8 +535,10 @@ show_summary() {
     fi
     log ""
     log "Generated Files:"
-    log "  .env                  Environment variables"
-    log "  docker-compose.yml    Container configuration"
+    log "  $WORK_DIR/.env"
+    log "                        Environment variables"
+    log "  $WORK_DIR/docker-compose.yml"
+    log "                        Container configuration"
     if [ -f "$TRUSTSTORE_DIR/cacerts" ]; then
         log "  $TRUSTSTORE_DIR/cacerts"
         log "                        Java truststore with FreeIPA CA"
@@ -472,10 +560,13 @@ show_summary() {
 # --- Argument Parsing ---
 
 parse_arguments() {
-    while getopts "h:?" opt; do
+    while getopts "h:s:?" opt; do
         case $opt in
             h)
                 KC_HOSTNAME="$OPTARG"
+                ;;
+            s)
+                IPA_SERVER_SPECIFIED="$OPTARG"
                 ;;
             \?)
                 show_usage
@@ -501,6 +592,14 @@ parse_arguments() {
         echo "ERROR: Invalid hostname format: $KC_HOSTNAME" >&2
         exit 1
     fi
+
+    # Validate IPA server hostname if specified
+    if [ -n "$IPA_SERVER_SPECIFIED" ]; then
+        if [[ ! "$IPA_SERVER_SPECIFIED" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$ ]]; then
+            echo "ERROR: Invalid IPA server hostname format: $IPA_SERVER_SPECIFIED" >&2
+            exit 1
+        fi
+    fi
 }
 
 # --- Main Function ---
@@ -509,6 +608,9 @@ main() {
     # Parse command line arguments first
     parse_arguments "$@"
 
+    # Create work directory
+    mkdir_work_dir
+
     log "==================================================================="
     log "Keycloak with FreeIPA Backend Setup"
     log "(c) 2025 Jackson Tong"
@@ -516,10 +618,14 @@ main() {
     log ""
     log "Starting setup script..."
     log "Log file: $LOG_FILE"
+    log "Work directory: $WORK_DIR"
     log "External hostname: $KC_HOSTNAME"
+    if [ -n "$IPA_SERVER_SPECIFIED" ]; then
+        log "FreeIPA server: $IPA_SERVER_SPECIFIED (specified via -s)"
+    fi
 
     # Check if any configuration files exist and prompt for overwrite
-    if [ -f ".env" ] || [ -f "docker-compose.yml" ] || [ -f "./runtime/keycloak_conf/cacerts" ]; then
+    if [ -f "$WORK_DIR/.env" ] || [ -f "$WORK_DIR/docker-compose.yml" ] || [ -f "$TRUSTSTORE_DIR/cacerts" ]; then
         log "Existing configuration detected"
         read -p "Existing configuration found, do you want to overwrite them? [y/N]: " OVERWRITE_ALL
         if [[ ! "$OVERWRITE_ALL" =~ ^[Yy]$ ]]; then
@@ -530,9 +636,9 @@ main() {
         log "User confirmed overwrite"
 
         # Delete runtime/postgres_data if it exists
-        if [ -d "./runtime/postgres_data" ]; then
+        if [ -d "$WORK_DIR/runtime/postgres_data" ]; then
             log "Deleting existing runtime/postgres_data directory..."
-            rm -rf ./runtime/postgres_data
+            rm -rf "$WORK_DIR/runtime/postgres_data"
             log "✓ runtime/postgres_data directory deleted"
         fi
     fi
@@ -542,7 +648,7 @@ main() {
 
     # Import FreeIPA CA certificate if IPA is configured
     if [ -n "$IPA_SERVER" ]; then
-        import_freeipa_ca_cert
+        import_freeipa_ca_cert || true
     fi
 
     # Generate configuration files

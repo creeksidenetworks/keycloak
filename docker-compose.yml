@@ -20,8 +20,8 @@ services:
       ports:
         - "${KEYCLOAK_HTTP_PORT}:8080"
       volumes:
-        - ./runtime/keycloak_conf:/opt/keycloak/conf
-        - ./providers:/opt/keycloak/providers
+        - /opt/keycloak/runtime/keycloak_conf:/opt/keycloak/conf
+        - /opt/keycloak/providers:/opt/keycloak/providers
       depends_on:
         - keycloak-postgres
 
@@ -35,7 +35,7 @@ services:
       ports:
         - "5432:5432"
       volumes:
-        - ./runtime/postgres_data:/var/lib/postgresql/data
+        - /opt/keycloak/runtime/postgres_data:/var/lib/postgresql/data
 
 volumes:
   postgres_data:
@@ -43,4 +43,4 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: ./runtime/postgres_data
+      device: /opt/keycloak/runtime/postgres_data
