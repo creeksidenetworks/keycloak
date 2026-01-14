@@ -15,7 +15,7 @@ Complete Identity and Access Management (IAM) solution with FreeIPA LDAP integra
 The setup script automatically detects your FreeIPA configuration and generates all required files.
 
 ```bash
-./setup.sh -h keycloak.example.com
+./setup.sh -h keycloak.example.com -s <ipa server>
 ```
 
 **Arguments:**
