@@ -10,13 +10,16 @@ services:
         - KC_DB_USERNAME=${POSTGRES_USER}
         - KC_DB_PASSWORD=${POSTGRES_PASSWORD}
         - KC_HOSTNAME=${KC_HOSTNAME}
-        - KC_HOSTNAME_STRICT=${KC_HOSTNAME_STRICT}
         - KC_BOOTSTRAP_ADMIN_USERNAME=${KC_BOOTSTRAP_ADMIN_USERNAME}
         - KC_BOOTSTRAP_ADMIN_PASSWORD=${KC_BOOTSTRAP_ADMIN_PASSWORD}
         - KC_SPI_TRUSTSTORE_FILE_ENABLED=true
         - KC_SPI_TRUSTSTORE_FILE_FILE=/opt/keycloak/conf/cacerts
         - KC_SPI_TRUSTSTORE_FILE_PASSWORD=changeit
         - KC_SPI_TRUSTSTORE_FILE_HOSTNAME_VERIFICATION_POLICY=ANY
+        # Custom settings for reverse proxy with non-standard port
+        - KC_PROXY=edge             # This tells Keycloak it's behind a proxy
+        - KC_HOSTNAME_STRICT=false  # Disable strict hostname checking for debug
+        - KC_HOSTNAME_PORT=58443    # This forces Keycloak to use the correct port in its generated links
       ports:
         - "${KEYCLOAK_HTTP_PORT}:8080"
       volumes:
