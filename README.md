@@ -135,6 +135,57 @@ Expected containers:
 
 **⚠️ IMPORTANT**: Change the admin password after first login!
 
+## Use non-standard https port
+
+In some situations, standard https port 443 is not available. You may have to pick a none standard port, ie, 58443.
+
+You will need to update 
+1) Nginx proxy manager settings
+2) Update .env file to configure keycloak to advertise 58443 in all redirect URIs, token endpoints, OIDC discovery docs, etc.
+
+### Nginx proxy manager
+Add following to the advance configuration tab.
+
+```
+listen 58443 ssl;
+
+location / {
+    # Set the REAL external port here
+    set $external_port 58443;
+
+    proxy_pass http://<keycloak internal IP>:8080;
+    #proxy_pass $forward_scheme://$server:$port;
+    
+    # Standard headers
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    
+    # CRITICAL: Tell Keycloak the internet-facing port is 58443
+    proxy_set_header X-Forwarded-Port $external_port;
+    proxy_set_header X-Forwarded-Host $host:$external_port;
+
+    # Buffer sizes for OIDC tokens
+    proxy_buffer_size 128k;
+    proxy_buffers 4 256k;
+    proxy_busy_buffers_size 256k;
+
+    # WebSocket & Timeouts
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 3600s;
+}
+```
+
+### Confiugre keycloak to advertise 58443 port
+Update the .env file with following.
+```
+#KC_HOSTNAME=login.exmaple.com
+KC_HOSTNAME_URL=login.example.com:58443
+```
+
 ## Configuration
 
 ### Realm Setup
